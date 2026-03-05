@@ -1,0 +1,321 @@
+# dbcq
+
+database connect query.
+
+connect to databases listed as targets in ~/.dbc file.
+
+``//dbcq.go:
+package dbcq
+import (
+  ``import``
+)
+``DB type``
+``Info type``
+``Conf type``
+``Open``
+``Close``
+//Query
+``Qfad``
+``Info``
+
+``info``
+``connstr``
+``
+
+DB wraps the database connection and info.
+
+``/DB type:
+type DB struct {
+  db *sql.DB
+  info Info
+}
+``
+
+import the main db package and various drivers.
+
+``/import:
+"database/sql"
+_ "github.com/mattn/go-sqlite3"
+_ "github.com/microsoft/go-mssqldb"
+``
+
+Info holds the connection info for a db target.
+
+``/Info type:
+type Info struct {
+  Target string
+  Type string      `yaml:"type"`
+  Database string  `yaml:"database"`
+  User string  `yaml:"user"`
+  Password string  `yaml:"password"`
+  Host string    `yaml:"host"`
+  Port int      `yaml:"port"`
+}
+``
+
+Conf is a map of Infos keyed by string.
+
+``/Conf type:
+type Conf map[string]Info
+``
+
+Open opens a db connection to the requested target from .dbc file.
+
+``/Open:
+func Open(target string) (*DB, error) { 
+  ``.``
+}
+``
+
+make a new db instance.
+
+``
+  db := new(DB)
+``
+
+get the connection info for target.
+
+``
+  var err error
+  db.info, err = info(target)
+  if err != nil { return nil, err }
+``
+
+open the db.
+
+``
+  db.db, err = sql.Open(db.info.Type, connstr(db.info))
+  if err != nil { return nil, err }
+  return db, nil
+``
+
+Close closes a dbcq connection.
+
+``/Close:
+func (d *DB) Close() {
+  d.db.Close()
+}
+``
+
+Qfad (query-fetch-all-dict) queries and returns the result as a slice
+of maps keyed by column name.  the keys are lower case.
+
+``/Qfad:
+func (d *DB) Qfad(query string/*, args ...string*/) ([]map[string]interface{}, error) {
+  ``.``
+}
+``
+
+code adapted from https://stackoverflow.com/q/30569005
+
+send the query to db, get the result rows.
+
+``
+  rows, err := d.db.Query(query) //, args)
+  //defer rows.Close()
+  if err != nil { return nil, err }
+``
+
+get the column names.
+
+``
+  colnames, err := rows.Columns()
+  if err != nil { return nil, err }
+``
+
+make a cols slice for the scanned values. the scanner takes pointers, so point to each place in the cols slice. 
+
+``
+  cols := make([]interface{}, len(colnames))
+  colptrs := make([]interface{}, len(colnames))
+  for i := 0; i < len(colnames); i++ {
+    colptrs[i] = &cols[i]
+  }
+``
+
+go over the rows and put each row into a map keyed by column name.
+
+``
+  out := make([]map[string]interface{}, 0)
+  for rows.Next() {
+    ``.``
+  }
+``
+
+scan into the cols slice using colptrs (that points to cols).
+
+``
+    err = rows.Scan(colptrs...)
+    if err != nil { return nil, err }
+``
+
+make a map and put in the values. this works cause the column order is the same for Columns() and Scan(). 
+
+``
+    mymap := make(map[string]interface{})
+    
+    for i, val := range cols {
+      mymap[strings.ToLower(colnames[i])] = val
+    }
+``
+
+variable sized numbers like numeric(19, 0), seem to be returned as uint8 (byte) slices.
+
+convert them to ints by going via strings, as suggested here: https://www.bacancytechnology.com/qanda/golang/how-to-convert-from-byte-to-int-in-go
+
+see also the getInt() function at the end.
+
+``
+    for k, val := range mymap {
+      switch val.(type) {
+      case []uint8:
+        s := string(val.([]byte))
+        num, err := strconv.Atoi(s)
+        if err != nil { return nil, err }
+        mymap[k] = num
+      }
+    }
+``
+
+append the map to the slice.
+
+``
+    out = append(out, mymap)
+``
+
+after the loop, return.
+
+``../
+  rows.Close()
+  return out, nil
+``
+
+import.
+
+``/import
+"strings"
+"strconv"
+``
+
+Info returns the info for the current target.
+
+``/Info:
+func (d *DB) Info() Info {
+  return d.info
+}
+``
+
+info gets the db info for a given target.
+
+``/info:
+func info(target string) (Info, error) {
+  ``.``
+}
+``
+
+open the .dbc file.
+
+``
+  b, err := os.ReadFile("/home/max/.dbc")
+  if err != nil { return Info{}, err }
+``
+
+unmarshal the yaml.
+
+``
+  cnf := Conf{}
+  err = yaml.Unmarshal(b, &cnf)
+  if err != nil { return Info{}, err }
+``
+
+return the info for target.
+
+``
+  for targ, info := range cnf {
+    //fmt.Println("t: ", targ)
+    if targ == target {
+      info.Target = targ
+      return info, nil
+    }
+  }
+``
+
+target not found.
+
+``
+  return Info{}, errors.New(fmt.Sprintf("target %s not found.", target))
+``
+
+import.
+
+``/import
+  "os"
+  "errors"
+  "gopkg.in/yaml.v3"
+``
+  
+ 
+connstr sticks together a connection string from db info.
+
+``/connstr:
+func connstr(info Info) string {
+  ``.``
+}
+``
+
+go by db type.
+
+``
+  if info.Type == "sqlite3" {
+    return info.Database
+  } else if info.Type == "mssql" {
+    ``mssql``
+  }
+``
+
+for mssql, url seems to be the preferred format, see
+https://pkg.go.dev/github.com/microsoft/go-mssqldb
+
+the database name is passed as url query value (the stuff behind the ? in the url).
+
+``./mssql:
+    vals := url.Values{}
+    vals.Add("database", info.Database)
+``
+
+stitch the url together.
+
+``
+    u := &url.URL {
+      Scheme: "sqlserver",
+      User: url.UserPassword(info.User, info.Password),
+      Host: fmt.Sprintf("%s:%d", info.Host, info.Port),
+      RawQuery: vals.Encode(),
+    }
+    return u.String()
+``
+
+if type unknown, return empty string for now. todo error?
+
+``../
+    return ""
+``
+
+import.
+
+``/import
+"fmt"
+"net/url"
+``
+
+toInt converts a byte slice to an int. this is needed when variable length numeric sql types get returned as []uint8.
+
+taken from https://go.dev/play/p/eECOVBhWmlH
+
+see https://forum.golangbridge.org/t/converting-single-byte-slice-to-int/8646/3
+
+func toInt(s []byte) int {
+	var b [8]byte
+	copy(b[8-len(s):], s)
+	return int(binary.BigEndian.Uint64(b[:]))
+}

@@ -1,0 +1,67 @@
+# main
+
+the main cli.
+
+``//main.go:
+package main
+import (
+  ``import``
+)
+``main``
+``
+
+main sends a query to a db target and prints the results as json array
+of rows keyed by column name.
+
+``/main:
+func main() {
+  ``.``
+}
+``
+
+get the flags.
+
+``
+  flag.Parse()
+``
+
+get the positional args.
+
+``
+  args := flag.Args()
+  target := args[0]
+  query := args[1]
+``
+
+string up a dbcq instance.
+
+``
+  db, err := dbcq.Open(target)
+  defer db.Close()
+  if err != nil { log.Fatal("error: ", err) }
+``
+
+query.
+
+``
+  out, err := db.Qfad(query)
+  if err != nil { fmt.Println(err) }
+``
+
+print the result.
+
+``
+  b, err := json.Marshal(out)
+  if err != nil { log.Fatal(err) }
+  fmt.Println(string(b))
+``
+
+import.
+
+``/import:
+  "log"
+  "flag"
+  "fmt"
+  "github.com/tnustrings/dbcq"
+  "encoding/json"
+``
