@@ -1,4 +1,4 @@
-module github.com/tnustrings/dbcq
+module github.com/tnustrings/dbcqq
 
 go 1.25.7
 

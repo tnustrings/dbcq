@@ -3,7 +3,7 @@ import (
   "log"
   "flag"
   "fmt"
-  "github.com/tnustrings/dbcq"
+  "github.com/tnustrings/dbcqq"
   "encoding/json"
 )
 func main() {
